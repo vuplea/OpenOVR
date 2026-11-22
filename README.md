@@ -1,3 +1,14 @@
+A fork of [OpenComposite](https://gitlab.com/znixian/OpenOVR) that the Outer Wilds VR mod,
+[NomaiVR](https://github.com/Raicuparta/nomai-vr), runs on. On top of upstream:
+
+- Button prompts: a game that asks which hand and which button an action is on gets the real answer on Touch
+  controllers, where upstream gives a placeholder. That includes actions bound to a stick direction.
+- VR keyboard: a game that asks for it through the newer `ShowKeyboard`, the one taking flags, no longer aborts.
+  No keyboard appears: as with the older call, the game is told at once that the keyboard is done.
+- A game that loads its action manifest twice no longer aborts when the manifest has Index bindings.
+- No headset: when the runtime reports that none is available, a Retry / Cancel prompt replaces the abort.
+- Builds with current MSVC.
+
 # OpenComposite (OpenXR) - Play SteamVR games without SteamVR!
 [![Discord](https://img.shields.io/discord/499733750209314816.svg?style=for-the-badge&logo=discord&label=discord)](https://discord.gg/zYA6Tzs)
 [![AppVeyor](https://img.shields.io/appveyor/ci/ZNix/openovr.svg?style=for-the-badge&logo=appveyor)](https://ci.appveyor.com/project/ZNix/openovr)
