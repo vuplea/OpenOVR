@@ -1295,6 +1295,13 @@ EVRInputError BaseInput::GetInputSourceHandle(const char* pchInputSourcePath, VR
 	return VRInputError_None;
 }
 
+// The input a source belongs to, eg /user/hand/left/input/trigger for /user/hand/left/input/trigger/value
+static std::string inputOfSource(const std::string& source)
+{
+	const size_t input = source.find("/input/");
+	return input == std::string::npos ? source : source.substr(0, source.find('/', input + strlen("/input/")));
+}
+
 EVRInputError BaseInput::UpdateActionState(VR_ARRAY_COUNT(unSetCount) VRActiveActionSet_t* pSets,
     uint32_t unSizeOfVRSelectedActionSet_t, uint32_t unSetCount)
 {
@@ -1302,32 +1309,24 @@ EVRInputError BaseInput::UpdateActionState(VR_ARRAY_COUNT(unSetCount) VRActiveAc
 
 	OOVR_FALSE_ABORT(sizeof(*pSets) == unSizeOfVRSelectedActionSet_t);
 
-	// Make sure all the ActionSets have the same priority, since we don't have any way around that right now
-	if (unSetCount > 1) {
-		int priority = pSets[0].nPriority;
-		for (uint32_t i = 1; i < unSetCount; i++) {
-			if (pSets[i].nPriority != priority) {
-				ActionSet* as1 = cast_ASH(pSets[0].ulActionSet);
-				ActionSet* curAs = cast_ASH(pSets[1].ulActionSet);
-				OOVR_SOFT_ABORTF("Active action set %s (%d) and %s (%d) have different priorities, this is not yet supported",
-				    as1->fullName.c_str(), pSets[0].nPriority, curAs->fullName.c_str(), pSets[1].nPriority);
-			}
-		}
-	}
-
 	std::vector<XrActiveActionSet> aas(unSetCount + 1);
+	std::vector<std::string> restrictedTo(unSetCount); // The hand each set is restricted to, empty for both
+	bool samePriority = true;
 
 	for (uint32_t i = 0; i < unSetCount; i++) {
 		VRActiveActionSet_t& set = pSets[i];
 
 		GET_ACTION_SET_FROM_HANDLE(as, set.ulActionSet);
 		aas[i].actionSet = as->xr;
+		as->priority = set.nPriority;
+		samePriority &= set.nPriority == pSets[0].nPriority;
 
 		if (set.ulRestrictedToDevice != vr::k_ulInvalidInputValueHandle) {
 			std::shared_ptr<ITrackedDevice> dev = ivhToDev(set.ulRestrictedToDevice);
 			if (dev && dev->GetHand() != ITrackedDevice::HAND_NONE) {
 				LegacyControllerActions& ctrl = legacyControllers[dev->GetHand()];
 				aas[i].subactionPath = ctrl.handPathXr;
+				restrictedTo[i] = allSubactionPathNames[dev->GetHand()];
 			}
 		}
 	}
@@ -1340,6 +1339,23 @@ EVRInputError BaseInput::UpdateActionState(VR_ARRAY_COUNT(unSetCount) VRActiveAc
 	syncInfo.countActiveActionSets = aas.size();
 	OOVR_FAILED_XR_ABORT(xrSyncActions(xr_session.get(), &syncInfo));
 	syncSerial++;
+
+	// OpenXR fixes an action set's priority when the set is created, while here it comes with every call:
+	// the getters apply it, from the inputs each set is bound to.
+	claimedInputs.clear();
+	for (uint32_t i = 0; i < unSetCount && !samePriority; i++) {
+		const ActionSet* as = cast_ASH(pSets[i].ulActionSet);
+		for (const auto& action : actions.GetItems()) {
+			if (action->set != as || action->haptic)
+				continue;
+
+			updateSources(action.get());
+			for (uint32_t source = 0; source < action->sourcesCount; source++) {
+				if (action->sourceNames[source].starts_with(restrictedTo[i]))
+					claimedInputs.emplace_back(as->priority, inputOfSource(action->sourceNames[source]));
+			}
+		}
+	}
 
 	for (size_t i = 0; i < allSubactionPaths.size(); i++) {
 		auto handDevice = BackendManager::Instance().GetBackendInstance()->GetDeviceByHand(static_cast<ITrackedDevice::TrackedDeviceType>(i));
@@ -1601,7 +1617,7 @@ EVRInputError BaseInput::GetDigitalActionData(VRActionHandle_t action, InputDigi
 	for (size_t i = 0; i < allSubactionPaths.size(); i++) {
 		XrPath subactionPath = allSubactionPaths[i];
 
-		if (!checkRestrictToDevice(ulRestrictToDevice, subactionPath))
+		if (!checkRestrictToDevice(ulRestrictToDevice, subactionPath) || isHiddenByPriority(act, allSubactionPathNames[i]))
 			continue;
 
 		getInfo.subactionPath = subactionPath;
@@ -1655,7 +1671,7 @@ EVRInputError BaseInput::GetAnalogActionData(VRActionHandle_t action, InputAnalo
 
 	for (size_t i = 0; i < allSubactionPaths.size(); i++) {
 		XrPath subactionPath = allSubactionPaths[i];
-		if (!checkRestrictToDevice(ulRestrictToDevice, subactionPath))
+		if (!checkRestrictToDevice(ulRestrictToDevice, subactionPath) || isHiddenByPriority(act, allSubactionPathNames[i]))
 			continue;
 
 		getInfo.subactionPath = subactionPath;
@@ -2601,7 +2617,28 @@ bool BaseInput::checkRestrictToDevice(vr::VRInputValueHandle_t restrictToDevice,
 	return subactionPath == ivh->devicePath;
 }
 
-VRInputValueHandle_t BaseInput::activeOriginFromSubaction(Action* action, const char* subactionPath)
+bool BaseInput::isHiddenByPriority(Action* action, const std::string& subactionPath)
+{
+	if (claimedInputs.empty())
+		return false;
+
+	updateSources(action);
+	bool hidden = false;
+	for (uint32_t i = 0; i < action->sourcesCount; i++) {
+		if (!action->sourceNames[i].starts_with(subactionPath))
+			continue;
+
+		const std::string input = inputOfSource(action->sourceNames[i]);
+		hidden = std::any_of(claimedInputs.begin(), claimedInputs.end(), [&](const auto& claim) {
+			return claim.first > action->set->priority && claim.second == input;
+		});
+		if (!hidden)
+			return false;
+	}
+	return hidden;
+}
+
+void BaseInput::updateSources(Action* action)
 {
 	// FIXME the docs for xrEnumerateBoundSourcesForAction are wrong and will be updated (source: rpavlik). They don't
 	//  have to return a path listed in the input profile, they can be literally anything (not even a /user/hand/<side>
@@ -2641,6 +2678,11 @@ VRInputValueHandle_t BaseInput::activeOriginFromSubaction(Action* action, const 
 		// to prevent a thundering herd problem.
 		action->nextSourcesUpdate = syncSerial + 200 + ((int)std::rand() % 100); // NOLINT(cert-msc50-cpp)
 	}
+}
+
+VRInputValueHandle_t BaseInput::activeOriginFromSubaction(Action* action, const char* subactionPath)
+{
+	updateSources(action);
 
 	// Go through the input sources and find the first one that starts with the subaction path
 	for (int i = 0; i < (int)action->sourcesCount; i++) {

@@ -448,6 +448,7 @@ private:
 		std::string fullName; // Eg '/actions/main'
 		std::string name; // Eg 'main'
 		ActionSetUsage usage = ActionSetUsage::LeftRight;
+		int priority = 0; // As passed to the last UpdateActionState that had this set active
 
 		XrActionSet xr = XR_NULL_HANDLE;
 	};
@@ -634,7 +635,7 @@ private:
 		ITrackedDevice::TrackedDeviceType skeletalHand = ITrackedDevice::HAND_NONE;
 
 		// The action sources (paths like /user/hand/left/input/select/click, specifying an output of a physical
-		// control) this action is bound to. This is cached, and is updated by activeOriginFromSubaction.
+		// control) this action is bound to. This is cached, and is updated by updateSources.
 		XrPath sources[sources_size] = {};
 		std::string sourceNames[sources_size] = {};
 		uint32_t sourcesCount = 0; // Number of sources in the above that are defined
@@ -793,6 +794,10 @@ private:
 
 	XrActionSet legacyInputsSet = XR_NULL_HANDLE;
 
+	// The inputs the active action sets are bound to, each with its set's priority: an active set of a lower
+	// priority cannot read them. Empty while all active sets share one priority.
+	std::vector<std::pair<int, std::string>> claimedInputs;
+
 	/**
 	 * The list of subaction paths anything can be bound to - this basically just means 'everything' and contains
 	 * both the left and right hand paths as defined in the OpenXR spec.
@@ -843,6 +848,13 @@ private:
 	 * consistent manner.
 	 */
 	VRInputValueHandle_t activeOriginFromSubaction(Action* action, const char* subactionPath);
+
+	// Refreshes the action's cached sources when they are due.
+	void updateSources(Action* action);
+
+	// Whether every input the action is bound to on this hand belongs to an active action set of a higher
+	// priority. An action that also has a free input there stays readable through all of them.
+	bool isHiddenByPriority(Action* action, const std::string& subactionPath);
 
 	/**
 	 * Get the state for a digital action, which could be bound to a DPad action.
