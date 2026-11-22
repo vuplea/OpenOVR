@@ -869,7 +869,7 @@ EVROverlayError BaseOverlay::ShowKeyboard(EGamepadTextInputMode eInputMode, EGam
 EVROverlayError BaseOverlay::ShowKeyboard(EGamepadTextInputMode eInputMode, EGamepadTextInputLineMode eLineInputMode, uint32_t unFlags,
     const char* pchDescription, uint32_t unCharMax, const char* pchExistingText, uint64_t uUserValue)
 {
-	STUBBED();
+	return ShowKeyboard(eInputMode, eLineInputMode, pchDescription, unCharMax, pchExistingText, (unFlags & KeyboardFlag_Minimal) != 0, uUserValue);
 }
 EVROverlayError BaseOverlay::ShowKeyboardForOverlay(VROverlayHandle_t ulOverlayHandle,
     EGamepadTextInputMode eInputMode, EGamepadTextInputLineMode eLineInputMode,
@@ -889,7 +889,8 @@ EVROverlayError BaseOverlay::ShowKeyboardForOverlay(VROverlayHandle_t ulOverlayH
     EGamepadTextInputLineMode eLineInputMode, uint32_t unFlags, const char* pchDescription, uint32_t unCharMax,
     const char* pchExistingText, uint64_t uUserValue)
 {
-	STUBBED();
+	return ShowKeyboardForOverlay(ulOverlayHandle, eInputMode, eLineInputMode, pchDescription, unCharMax, pchExistingText,
+	    (unFlags & KeyboardFlag_Minimal) != 0, uUserValue);
 }
 uint32_t BaseOverlay::GetKeyboardText(char* pchText, uint32_t cchText)
 {

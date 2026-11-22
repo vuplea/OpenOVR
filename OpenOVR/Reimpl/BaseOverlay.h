@@ -101,6 +101,11 @@ enum OOVR_EGamepadTextInputLineMode {
 	k_EGamepadTextInputLineModeMultipleLines = 1
 };
 
+enum OOVR_EKeyboardFlags {
+	KeyboardFlag_Minimal = 1 << 0, // makes the keyboard send key events immediately instead of accumulating a buffer
+	KeyboardFlag_Modal = 2 << 0, // makes the keyboard take all focus and dismiss when clicking off the panel
+};
+
 /** Directions for changing focus between overlays with the gamepad */
 enum OOVR_EOverlayDirection {
 	OverlayDirection_Up = 0,
