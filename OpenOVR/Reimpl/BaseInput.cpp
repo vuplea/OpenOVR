@@ -2420,9 +2420,19 @@ EVRInputError BaseInput::GetOriginTrackedDeviceInfo(VRInputValueHandle_t origin,
 	if (!dev)
 		return vr::VRInputError_InvalidHandle;
 
+	// The origin names an input on the device, eg /user/hand/left/input/trigger/value: applications match
+	// devicePath against the handle of the device itself, and look the component up in its render model.
+	const InputValueHandle* ivh = cast_IVH(origin);
 	info->trackedDeviceIndex = dev->DeviceIndex();
-	info->devicePath = origin;
-	strcpy_arr(info->rchRenderModelComponentName, "getorigintrackeddeviceinfo_testing"); // TODO figure out how this should work
+	OOVR_FALSE_ABORT(GetInputSourceHandle(ivh->devicePathString.c_str(), &info->devicePath) == vr::VRInputError_None);
+
+	const std::string inputPrefix = ivh->devicePathString + "/input/";
+	const InteractionProfile* profile = dev->GetInteractionProfile();
+	if (profile && ivh->path.starts_with(inputPrefix)) {
+		std::string input = ivh->path.substr(inputPrefix.size());
+		input.erase(std::min(input.find('/'), input.size()));
+		strcpy_arr(info->rchRenderModelComponentName, profile->GetRenderModelComponentName(input).c_str());
+	}
 
 	return VRInputError_None;
 }
@@ -2599,11 +2609,23 @@ VRInputValueHandle_t BaseInput::activeOriginFromSubaction(Action* action, const 
 
 	// If it's time for an update and this isn't a virtual input, update its sources
 	if (syncSerial >= action->nextSourcesUpdate && action->xr) {
-		// Get the attached sources
-		XrBoundSourcesForActionEnumerateInfo enumInfo = { XR_TYPE_BOUND_SOURCES_FOR_ACTION_ENUMERATE_INFO };
-		enumInfo.action = action->xr;
-		OOVR_FAILED_XR_ABORT(xrEnumerateBoundSourcesForAction(xr_session.get(), &enumInfo,
-		    std::size(action->sources), &action->sourcesCount, action->sources));
+		// Get the attached sources. A dpad binding reads its parent input through an action of its own,
+		// so that action's sources count as this one's.
+		std::vector<XrAction> sourceActions = { action->xr };
+		for (const auto& [profile, data] : action->perProfileData) {
+			for (const auto& [parentName, dpad] : data.dpadBindings)
+				sourceActions.push_back(DpadBindingInfo::parents.at(parentName).vectorAction);
+		}
+
+		action->sourcesCount = 0;
+		for (XrAction sourceAction : sourceActions) {
+			XrBoundSourcesForActionEnumerateInfo enumInfo = { XR_TYPE_BOUND_SOURCES_FOR_ACTION_ENUMERATE_INFO };
+			enumInfo.action = sourceAction;
+			uint32_t count = 0;
+			OOVR_FAILED_XR_ABORT(xrEnumerateBoundSourcesForAction(xr_session.get(), &enumInfo,
+			    std::size(action->sources) - action->sourcesCount, &count, action->sources + action->sourcesCount));
+			action->sourcesCount += count;
+		}
 
 		// Convert the source paths to strings
 		char buff[256];

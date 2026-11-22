@@ -127,6 +127,16 @@ OculusTouchInteractionProfile::OculusTouchInteractionProfile()
 	    { -0.016694, -0.02522, 0.024687 },
 	    { -37.4, 0.0, 0.0 });
 	
+	// The component names in SteamVR\resources\rendermodels\oculus_quest2_controller_left and _right
+	this->renderModelComponentNames = {
+		{ "a", "button_a" },
+		{ "b", "button_b" },
+		{ "x", "button_x" },
+		{ "y", "button_y" },
+		{ "squeeze", "button_grip" },
+		{ "menu", "button_enter" },
+	};
+
 	// Define reference poses
 	leftHandPoses[VRSkeletalReferencePose_BindPose] = oculus::leftBindPose;
 	leftHandPoses[VRSkeletalReferencePose_OpenHand] = oculus::leftOpenHandPose;

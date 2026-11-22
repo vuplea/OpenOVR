@@ -148,6 +148,12 @@ std::optional<glm::mat4> InteractionProfile::GetComponentTransform(ITrackedDevic
 		return iter->second;
 }
 
+std::string InteractionProfile::GetRenderModelComponentName(const std::string& input) const
+{
+	const auto iter = renderModelComponentNames.find(input);
+	return iter == renderModelComponentNames.end() ? input : iter->second;
+}
+
 std::optional<std::array<vr::VRBoneTransform_t, 31>> InteractionProfile::GetSkeletalReferencePose(ITrackedDevice::TrackedDeviceType hand, int pose) const
 {
 	auto poses = hand == ITrackedDevice::HAND_LEFT ? leftHandPoses : rightHandPoses;

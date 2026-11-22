@@ -158,6 +158,12 @@ public:
 	std::optional<glm::mat4> GetComponentTransform(ITrackedDevice::TrackedDeviceType hand, const std::string& name) const;
 
 	/**
+	 * Get the name SteamVR's render model of the controller gives the component for an OpenXR input,
+	 * for example 'button_a' for 'a' on a Touch controller. By default, this is the input's own name.
+	 */
+	std::string GetRenderModelComponentName(const std::string& input) const;
+
+	/**
 	 * Get the specified reference pose of a controller (in parent space).
 	 *
 	 * These will unfortunately need to be specified for each controller, but the Quest poses are used as a good-enough fallback.
@@ -246,6 +252,9 @@ protected:
 	 * Don't manually set 'handgrip' - instead, use GetComponentTransform.
 	 */
 	std::unordered_map<std::string, glm::mat4> leftComponentTransforms, rightComponentTransforms;
+
+	// The OpenXR inputs whose render model component has another name, as exposed via GetRenderModelComponentName.
+	std::unordered_map<std::string, std::string> renderModelComponentNames;
 
 	// Grip transforms for left and right hand
 	glm::mat4 leftHandGripTransform = glm::identity<glm::mat4>();
