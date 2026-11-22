@@ -377,6 +377,7 @@ EVRInputError BaseInput::SetActionManifestPath(const char* pchActionManifestPath
 		actions.Reset();
 		actionSets.Reset();
 		DpadBindingInfo::parents.clear();
+		indexGripExtensionActions.clear();
 		usingLegacyInput = false;
 	}
 
