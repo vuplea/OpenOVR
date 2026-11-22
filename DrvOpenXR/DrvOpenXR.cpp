@@ -83,7 +83,20 @@ static void CreateSystemID()
 	XrSystemGetInfo systemInfo{};
 	systemInfo.type = XR_TYPE_SYSTEM_GET_INFO;
 	systemInfo.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
-	OOVR_FAILED_XR_ABORT(xrGetSystem(xr_instance, &systemInfo, &xr_system));
+	XrResult res = xrGetSystem(xr_instance, &systemInfo, &xr_system);
+
+#ifdef _WIN32
+	// The runtime is there but the headset is not, for example it is not connected yet: let the user fix that.
+	while (res == XR_ERROR_FORM_FACTOR_UNAVAILABLE) {
+		const char* message = "The OpenXR runtime reports that no headset is available.\n\n"
+		                      "Connect the headset and choose Retry, or choose Cancel to quit.";
+		if (MessageBoxA(nullptr, message, "OpenComposite", MB_RETRYCANCEL | MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST) != IDRETRY)
+			break;
+		res = xrGetSystem(xr_instance, &systemInfo, &xr_system);
+	}
+#endif
+
+	OOVR_FAILED_XR_ABORT(res);
 }
 
 static void handleStartupInfo(const char* startupInfo)
